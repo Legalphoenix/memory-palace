@@ -3,7 +3,10 @@ const SAVED_PALACES_STORAGE_KEY = 'memory-palace-saves-v1';
 const STATUS_MAX_LINES = 80;
 const PLACEHOLDER_IMAGE_SRC = '#placeholder-image';
 const ANCHOR_PANEL_COLOR = '#f8fafc';
-const TEXT_FONT_URL = 'https://cdn.jsdelivr.net/gh/etiennepinchon/aframe-fonts@latest/fonts/roboto/Roboto-Regular-msdf.json';
+const TEXT_FONT_ID = 'font-roboto-msdf';
+const TEXT_FONT_IMAGE_ID = 'font-roboto-msdf-image';
+const TEXT_FONT_JSON_URL = 'https://cdn.jsdelivr.net/gh/etiennepinchon/aframe-fonts@latest/fonts/roboto/Roboto-Regular-msdf.json';
+const TEXT_FONT_IMAGE_URL = 'https://cdn.jsdelivr.net/gh/etiennepinchon/aframe-fonts@latest/fonts/roboto/Roboto-Regular.png';
 const PANEL_WIDTH = 2.2;
 const PANEL_HEIGHT = 2.6;
 const IMAGE_WIDTH = 1.8;
@@ -83,6 +86,7 @@ async function init() {
   buildRooms();
   loadStoredProgress();
   updateProgressDisplay();
+  ensureFontAssets();
   loadSavedPalaces();
   renderSavedPalaces();
   updateSaveButtonState();
@@ -330,7 +334,8 @@ function addEntranceDecor(parent, roomConfig) {
   const depth = roomConfig.dimensions?.depth ?? 12;
   const welcome = document.createElement('a-text');
   welcome.setAttribute('value', 'Memory Palace');
-  welcome.setAttribute('font', TEXT_FONT_URL);
+  welcome.setAttribute('font', `#${TEXT_FONT_ID}`);
+  welcome.setAttribute('font-image', `#${TEXT_FONT_IMAGE_ID}`);
   welcome.setAttribute('color', '#ffffff');
   welcome.setAttribute('width', 8);
   welcome.setAttribute('align', 'center');
@@ -580,7 +585,8 @@ function addSchoolDecor(parent, roomConfig) {
 
   const chalk = document.createElement('a-text');
   chalk.setAttribute('value', 'Учитесь с удовольствием!');
-  chalk.setAttribute('font', TEXT_FONT_URL);
+  chalk.setAttribute('font', `#${TEXT_FONT_ID}`);
+  chalk.setAttribute('font-image', `#${TEXT_FONT_IMAGE_ID}`);
   chalk.setAttribute('color', '#e9f5db');
   chalk.setAttribute('width', 4.5);
   chalk.setAttribute('align', 'center');
@@ -609,13 +615,33 @@ function resetAnchorContainers() {
 }
 
 function resetDynamicAssets() {
-  const keep = new Set(['placeholder-image']);
+  const keep = new Set(['placeholder-image', TEXT_FONT_ID, TEXT_FONT_IMAGE_ID]);
   Array.from(dom.assetManager.children).forEach(child => {
     if (!keep.has(child.id)) {
       child.remove();
     }
   });
   state.assetRegistry.clear();
+}
+
+function ensureFontAssets() {
+  if (!dom.assetManager) return;
+
+  if (!dom.assetManager.querySelector(`#${CSS.escape(TEXT_FONT_ID)}`)) {
+    const font = document.createElement('a-asset-item');
+    font.setAttribute('id', TEXT_FONT_ID);
+    font.setAttribute('src', TEXT_FONT_JSON_URL);
+    font.setAttribute('crossorigin', 'anonymous');
+    dom.assetManager.appendChild(font);
+  }
+
+  if (!dom.assetManager.querySelector(`#${CSS.escape(TEXT_FONT_IMAGE_ID)}`)) {
+    const fontImage = document.createElement('img');
+    fontImage.setAttribute('id', TEXT_FONT_IMAGE_ID);
+    fontImage.setAttribute('src', TEXT_FONT_IMAGE_URL);
+    fontImage.setAttribute('crossorigin', 'anonymous');
+    dom.assetManager.appendChild(fontImage);
+  }
 }
 
 function sanitizeAssetRoot(input) {
@@ -925,35 +951,32 @@ function buildAnchorEntity(anchor, roomId, index, roomConfig) {
   const ruText = document.createElement('a-text');
   ruText.setAttribute('value', anchor.ru ?? '');
   ruText.setAttribute('color', state.config.text?.ruColor ?? '#111');
-  ruText.setAttribute('font', TEXT_FONT_URL);
+  ruText.setAttribute('font', `#${TEXT_FONT_ID}`);
+  ruText.setAttribute('font-image', `#${TEXT_FONT_IMAGE_ID}`);
   ruText.setAttribute('width', PANEL_WIDTH * 1.05);
   ruText.setAttribute('align', 'center');
   ruText.setAttribute('baseline', 'bottom');
   ruText.setAttribute('wrap-count', state.config.text?.wrapChars ?? 40);
   ruText.setAttribute('position', `0 ${(PANEL_HEIGHT / 2) - 0.45} ${IMAGE_DEPTH_OFFSET}`);
   ruText.setAttribute('shader', 'msdf');
+  ruText.setAttribute('side', 'double');
   wrapper.appendChild(ruText);
+  setTextVisibility(ruText, true);
 
   const enText = document.createElement('a-text');
   enText.setAttribute('value', anchor.en ?? '');
   enText.setAttribute('color', state.config.text?.enColor ?? '#444');
-  enText.setAttribute('font', TEXT_FONT_URL);
+  enText.setAttribute('font', `#${TEXT_FONT_ID}`);
+  enText.setAttribute('font-image', `#${TEXT_FONT_IMAGE_ID}`);
   enText.setAttribute('width', PANEL_WIDTH * 1.05);
   enText.setAttribute('align', 'center');
   enText.setAttribute('baseline', 'top');
   enText.setAttribute('wrap-count', state.config.text?.wrapChars ?? 40);
   enText.setAttribute('position', `0 ${-(PANEL_HEIGHT / 2) + 0.55} ${IMAGE_DEPTH_OFFSET}`);
   enText.setAttribute('shader', 'msdf');
+  enText.setAttribute('side', 'double');
   enText.classList.add('en-label');
-  if (enText.object3D) {
-    enText.object3D.visible = state.revealEnglish;
-  } else {
-    enText.addEventListener('loaded', () => {
-      if (enText.object3D) {
-        enText.object3D.visible = state.revealEnglish;
-      }
-    }, { once: true });
-  }
+  setTextVisibility(enText, state.revealEnglish);
   wrapper.appendChild(enText);
 
   const hitbox = document.createElement('a-box');
@@ -1004,6 +1027,7 @@ function buildAnchorEntity(anchor, roomId, index, roomConfig) {
     item: anchor,
     roomId,
     entity: wrapper,
+    ruText,
     panel,
     enText,
     audioEntity
@@ -1195,13 +1219,26 @@ function applySearchFilter(rawQuery = '') {
   }
 }
 
+function setTextVisibility(textEl, visible) {
+  if (!textEl) return;
+  textEl.setAttribute('visible', visible);
+  if (textEl.object3D) {
+    textEl.object3D.visible = visible;
+  } else {
+    textEl.addEventListener('loaded', () => {
+      if (textEl.object3D) {
+        textEl.object3D.visible = visible;
+      }
+    }, { once: true });
+  }
+}
+
 function updateRevealState() {
   state.anchorEntries.forEach(entry => {
     if (!entry?.entity) return;
     entry.entity.classList.toggle('revealed', state.revealEnglish);
-    if (entry.enText && entry.enText.object3D) {
-      entry.enText.object3D.visible = state.revealEnglish;
-    }
+    setTextVisibility(entry.enText, state.revealEnglish);
+    setTextVisibility(entry.ruText, true);
   });
 }
 

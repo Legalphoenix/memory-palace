@@ -33,4 +33,4 @@ Edit `config.json` to tweak palette, placement, capacities, or room metadata. Up
 - `[mute]` labels mark anchors without audio.
 - Re-loading a dataset resets layout but preserves progress only when the dataset signature matches the previous load.
 - Saved layouts (TSV text + asset root) live in `localStorage`. Clear saved entries via the ✕ button if you need to reclaim space.
-- Cyrillic-friendly MSDF fonts are pulled from jsDelivr; adapt `TEXT_FONT_URL` in `app.js` if you prefer hosting fonts locally.
+- Cyrillic-friendly MSDF fonts are pulled from jsDelivr; tweak `TEXT_FONT_JSON_URL` / `TEXT_FONT_IMAGE_URL` in `app.js` if you prefer hosting fonts locally.
