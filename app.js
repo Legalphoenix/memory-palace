@@ -71,6 +71,7 @@ init().catch(err => {
 
 async function init() {
   bindUI();
+  updateRevealToggleButton();
 
   try {
     const config = await fetchConfig();
@@ -120,9 +121,8 @@ function bindUI() {
 
   dom.toggleReveal.addEventListener('click', () => {
     state.revealEnglish = !state.revealEnglish;
-    dom.toggleReveal.classList.toggle('active', state.revealEnglish);
-    dom.toggleReveal.textContent = state.revealEnglish ? 'Hide English' : 'Reveal English';
     updateRevealState();
+    updateRevealToggleButton();
   });
 
   dom.playRoomAudio.addEventListener('click', () => {
@@ -150,6 +150,12 @@ function bindUI() {
   dom.nextPage.addEventListener('click', () => {
     changeRoomPage(1);
   });
+}
+
+function updateRevealToggleButton() {
+  if (!dom.toggleReveal) return;
+  dom.toggleReveal.textContent = state.revealEnglish ? 'Hide All English' : 'Reveal All English';
+  dom.toggleReveal.classList.toggle('active', state.revealEnglish);
 }
 
 async function fetchConfig() {
@@ -595,7 +601,7 @@ async function buildPalaceFromTSV(file) {
   const assetRootInput = dom.assetRootInput.value.trim() || state.config.assetRoot || './';
   const assetRoot = sanitizeAssetRoot(assetRootInput);
   const label = file.name ?? 'Imported TSV';
-  const loaded = loadDataset({ text, assetRoot, label, rememberAssetInput: false, savedId: null });
+  const loaded = loadDataset({ text, assetRoot, label, rememberAssetInput: false, savedId: null, resetProgress: true });
   if (loaded) {
     state.selectedFile = null;
     dom.tsvInput.value = '';
@@ -624,7 +630,11 @@ function resetDynamicAssets() {
 function removeGeneratedTextAssets() {
   if (!dom.assetManager) return;
   Array.from(dom.assetManager.querySelectorAll('[data-generated="text"]')).forEach(el => el.remove());
-  state.textTextureCache.clear();
+  state.textTextureCache.forEach((value, key) => {
+    if (!value || value.scope !== 'global') {
+      state.textTextureCache.delete(key);
+    }
+  });
 }
 
 function sanitizeAssetRoot(input) {
@@ -635,7 +645,7 @@ function sanitizeAssetRoot(input) {
   return input;
 }
 
-function loadDataset({ text, assetRoot, label = 'Dataset', rememberAssetInput = true, savedId = null } = {}) {
+function loadDataset({ text, assetRoot, label = 'Dataset', rememberAssetInput = true, savedId = null, resetProgress = false } = {}) {
   const records = parseTSV(text);
   if (!records.length) {
     logStatus('No valid rows found in TSV.', 'error');
@@ -665,7 +675,10 @@ function loadDataset({ text, assetRoot, label = 'Dataset', rememberAssetInput = 
     logStatus(`Sample item: ${state.rawAnchors[0].ru} / ${state.rawAnchors[0].en}`);
   }
 
-  applyStoredProgressToAnchors(datasetSignature);
+  initializeProgress(datasetSignature, { reset: resetProgress });
+
+  state.revealEnglish = state.revealEnglish && !resetProgress;
+  updateRevealToggleButton();
 
   assignAnchorsToRooms();
   renderRoomPages();
@@ -689,6 +702,8 @@ function loadDataset({ text, assetRoot, label = 'Dataset', rememberAssetInput = 
   dom.saveButton.disabled = false;
   updateSaveButtonState();
   renderSavedPalaces();
+
+  updateRevealToggleButton();
 
   state.selectedFile = null;
   dom.tsvInput.value = '';
@@ -832,7 +847,8 @@ function getTextTexture(text = '', options = {}) {
     src: `#${id}`,
     width,
     height,
-    ratio: height / width
+    ratio: height / width,
+    scope
   };
   state.textTextureCache.set(key, result);
   return result;
@@ -874,6 +890,56 @@ function createTextPlane(text, options = {}) {
   plane.setAttribute('material', `shader: flat; transparent: true; src: ${texture.src}`);
   plane.setAttribute('position', options.position ?? '0 2 0');
   return plane;
+}
+
+const TOGGLE_COLOR_ACTIVE = '#3bc9db';
+const TOGGLE_COLOR_INACTIVE = '#d9e4f2';
+const TOGGLE_RING_COLOR_ACTIVE = '#1b6ca8';
+const TOGGLE_RING_COLOR_INACTIVE = '#263142';
+
+function createEnglishToggleButton(anchorId) {
+  const root = document.createElement('a-entity');
+  root.setAttribute('scale', '0.9 0.9 0.9');
+
+  const background = document.createElement('a-circle');
+  background.setAttribute('radius', 0.12);
+  background.setAttribute('material', `shader: flat; transparent: true; opacity: 0.92; color: ${TOGGLE_COLOR_INACTIVE}`);
+  background.setAttribute('rotation', '0 0 0');
+  root.appendChild(background);
+
+  const ring = document.createElement('a-ring');
+  ring.setAttribute('radius-inner', 0.13);
+  ring.setAttribute('radius-outer', 0.15);
+  ring.setAttribute('material', `shader: flat; transparent: true; opacity: 0.55; color: ${TOGGLE_RING_COLOR_INACTIVE}`);
+  ring.setAttribute('rotation', '0 0 0');
+  ring.setAttribute('position', '0 0 -0.005');
+  root.appendChild(ring);
+
+  const badgeTexture = getTextTexture('EN', {
+    width: 256,
+    height: 128,
+    fontSize: 82,
+    color: '#102133',
+    scope: 'global'
+  });
+  const badge = document.createElement('a-plane');
+  badge.setAttribute('width', 0.16);
+  badge.setAttribute('height', 0.09);
+  badge.setAttribute('material', `shader: flat; transparent: true; src: ${badgeTexture.src}`);
+  badge.setAttribute('position', '0 0 0.01');
+  root.appendChild(badge);
+
+  const handleClick = event => {
+    event.stopPropagation();
+    toggleAnchorEnglish(anchorId);
+  };
+
+  root.addEventListener('click', handleClick);
+  background.addEventListener('click', handleClick);
+  badge.addEventListener('click', handleClick);
+  ring.addEventListener('click', handleClick);
+
+  return { button: root, badge, background, ring };
 }
 
 function assignAnchorsToRooms() {
@@ -986,8 +1052,12 @@ function buildAnchorEntity(anchor, roomId, index, roomConfig) {
   const position = `${centerX} ${centerY} ${tierSign * wallOffset}`;
   const rotation = `0 ${tierSign === -1 ? 0 : 180} 0`;
 
+  const previousEntry = state.anchorEntries.get(anchor.id);
+  const initialManualVisible = typeof previousEntry?.manualVisible === 'boolean' ? previousEntry.manualVisible : false;
+  const initialEnglishVisible = state.revealEnglish ? true : initialManualVisible;
+
   const wrapper = document.createElement('a-entity');
-  wrapper.setAttribute('class', `anchor ${state.revealEnglish ? 'revealed' : 'anchor-hidden'}`);
+  wrapper.setAttribute('class', `anchor ${initialEnglishVisible ? 'revealed' : 'anchor-hidden'}`);
   wrapper.setAttribute('id', anchor.id);
   wrapper.setAttribute('position', position);
   wrapper.setAttribute('rotation', rotation);
@@ -1046,9 +1116,13 @@ function buildAnchorEntity(anchor, roomId, index, roomConfig) {
   enTextPlane.setAttribute('material', `shader: flat; transparent: true; src: ${enTexture.src}`);
   enTextPlane.setAttribute('position', `0 ${-(PANEL_HEIGHT / 2) + (enHeight / 2) + 0.15} ${IMAGE_DEPTH_OFFSET + 0.02}`);
   enTextPlane.classList.add('en-label');
-  enTextPlane.setAttribute('visible', state.revealEnglish);
-  enTextPlane.object3D.visible = state.revealEnglish;
+  enTextPlane.setAttribute('visible', initialEnglishVisible);
+  enTextPlane.object3D.visible = initialEnglishVisible;
   wrapper.appendChild(enTextPlane);
+
+  const enToggle = createEnglishToggleButton(anchor.id);
+  enToggle.button.setAttribute('position', `${(PANEL_WIDTH / 2) - 0.3} ${-(PANEL_HEIGHT / 2) + 0.35} ${IMAGE_DEPTH_OFFSET + 0.55}`);
+  wrapper.appendChild(enToggle.button);
 
   const hitbox = document.createElement('a-box');
   hitbox.setAttribute('width', PANEL_WIDTH + 0.2);
@@ -1094,15 +1168,21 @@ function buildAnchorEntity(anchor, roomId, index, roomConfig) {
     playAnchorAudio(anchor.id);
   });
 
-  state.anchorEntries.set(anchor.id, {
+  const entry = {
     item: anchor,
     roomId,
     entity: wrapper,
     ruText: ruTextPlane,
     panel,
     enText: enTextPlane,
+    enButton: enToggle.button,
+    enButtonBg: enToggle.background,
+    enButtonRing: enToggle.ring,
+    manualVisible: initialManualVisible,
     audioEntity
-  });
+  };
+  state.anchorEntries.set(anchor.id, entry);
+  refreshAnchorEnglish(entry);
 
   return wrapper;
 }
@@ -1290,14 +1370,43 @@ function applySearchFilter(rawQuery = '') {
   }
 }
 
+function toggleAnchorEnglish(anchorId) {
+  const entry = state.anchorEntries.get(anchorId);
+  if (!entry) return;
+  state.revealEnglish = false;
+  updateRevealToggleButton();
+  entry.manualVisible = !entry.manualVisible;
+  updateRevealState();
+}
+
+function refreshAnchorEnglish(entry) {
+  if (!entry) return;
+  entry.manualVisible = Boolean(entry.manualVisible);
+  const visible = state.revealEnglish ? true : entry.manualVisible;
+  if (entry.enText) {
+    entry.enText.setAttribute('visible', visible);
+    if (entry.enText.object3D) {
+      entry.enText.object3D.visible = visible;
+    }
+  }
+  if (entry.enButtonBg) {
+    const color = visible ? TOGGLE_COLOR_ACTIVE : TOGGLE_COLOR_INACTIVE;
+    entry.enButtonBg.setAttribute('material', `shader: flat; transparent: true; opacity: 0.92; color: ${color}`);
+  }
+  if (entry.enButtonRing) {
+    const ringColor = visible ? TOGGLE_RING_COLOR_ACTIVE : TOGGLE_RING_COLOR_INACTIVE;
+    entry.enButtonRing.setAttribute('material', `shader: flat; transparent: true; opacity: 0.55; color: ${ringColor}`);
+  }
+  if (entry.entity) {
+    entry.entity.classList.toggle('revealed', visible);
+    entry.entity.classList.toggle('anchor-hidden', !visible);
+  }
+}
+
 function updateRevealState() {
   state.anchorEntries.forEach(entry => {
     if (!entry?.entity) return;
-    entry.entity.classList.toggle('revealed', state.revealEnglish);
-    if (entry.enText && entry.enText.object3D) {
-      entry.enText.setAttribute('visible', state.revealEnglish);
-      entry.enText.object3D.visible = state.revealEnglish;
-    }
+    refreshAnchorEnglish(entry);
   });
 }
 
@@ -1430,13 +1539,26 @@ function loadStoredProgress() {
   }
 }
 
-function applyStoredProgressToAnchors(signature) {
-  if (!signature || state.progress.signature !== signature) {
+function initializeProgress(signature, { reset = false } = {}) {
+  if (!signature) {
+    state.progress.signature = null;
+    state.progress.seen = new Set();
+    state.progress.heard = new Set();
+    return;
+  }
+
+  const signatureChanged = state.progress.signature !== signature;
+  if (reset || signatureChanged) {
     state.progress.signature = signature;
     state.progress.seen = new Set();
     state.progress.heard = new Set();
     persistProgress();
+    return;
   }
+
+  const validIds = new Set(state.rawAnchors.map(anchor => anchor.id));
+  state.progress.seen = new Set(Array.from(state.progress.seen).filter(id => validIds.has(id)));
+  state.progress.heard = new Set(Array.from(state.progress.heard).filter(id => validIds.has(id)));
 }
 
 function shuffle(list) {
