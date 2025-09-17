@@ -3,15 +3,15 @@ const SAVED_PALACES_STORAGE_KEY = 'memory-palace-saves-v1';
 const STATUS_MAX_LINES = 80;
 const PLACEHOLDER_IMAGE_SRC = '#placeholder-image';
 const ANCHOR_PANEL_COLOR = '#f8fafc';
-const TEXT_FONT_ID = 'font-roboto-msdf';
-const TEXT_FONT_IMAGE_ID = 'font-roboto-msdf-image';
-const TEXT_FONT_JSON_URL = 'https://cdn.jsdelivr.net/gh/etiennepinchon/aframe-fonts@latest/fonts/roboto/Roboto-Regular-msdf.json';
-const TEXT_FONT_IMAGE_URL = 'https://cdn.jsdelivr.net/gh/etiennepinchon/aframe-fonts@latest/fonts/roboto/Roboto-Regular.png';
 const PANEL_WIDTH = 2.2;
 const PANEL_HEIGHT = 2.6;
 const IMAGE_WIDTH = 1.8;
 const IMAGE_HEIGHT = 1.2;
 const IMAGE_DEPTH_OFFSET = 0.05;
+const TEXT_TEXTURE_WIDTH = 1024;
+const TEXT_TEXTURE_HEIGHT = 384;
+const TEXT_CANVAS_PADDING = 64;
+const TEXT_FONT_FAMILY = 'Arial, Helvetica, sans-serif';
 
 const state = {
   config: null,
@@ -31,6 +31,7 @@ const state = {
     heard: new Set(),
     signature: null
   },
+  textTextureCache: new Map(),
   currentTSVText: null,
   currentAssetRoot: null,
   currentDatasetLabel: null,
@@ -86,7 +87,6 @@ async function init() {
   buildRooms();
   loadStoredProgress();
   updateProgressDisplay();
-  ensureFontAssets();
   loadSavedPalaces();
   renderSavedPalaces();
   updateSaveButtonState();
@@ -332,14 +332,12 @@ function vecToString(vec) {
 
 function addEntranceDecor(parent, roomConfig) {
   const depth = roomConfig.dimensions?.depth ?? 12;
-  const welcome = document.createElement('a-text');
-  welcome.setAttribute('value', 'Memory Palace');
-  welcome.setAttribute('font', `#${TEXT_FONT_ID}`);
-  welcome.setAttribute('font-image', `#${TEXT_FONT_IMAGE_ID}`);
-  welcome.setAttribute('color', '#ffffff');
-  welcome.setAttribute('width', 8);
-  welcome.setAttribute('align', 'center');
-  welcome.setAttribute('position', `0 3.4 ${-(depth / 2) + 0.1}`);
+  const welcome = createTextPlane('Memory Palace', {
+    color: '#ffffff',
+    width: 4,
+    position: `0 3.4 ${-(depth / 2) + 0.1}`,
+    persistent: true
+  });
   parent.appendChild(welcome);
 
   const ring = document.createElement('a-entity');
@@ -583,14 +581,12 @@ function addSchoolDecor(parent, roomConfig) {
   board.setAttribute('position', `0 2 ${(roomConfig.dimensions?.depth ?? 12) / -2 + 0.2}`);
   parent.appendChild(board);
 
-  const chalk = document.createElement('a-text');
-  chalk.setAttribute('value', 'Учитесь с удовольствием!');
-  chalk.setAttribute('font', `#${TEXT_FONT_ID}`);
-  chalk.setAttribute('font-image', `#${TEXT_FONT_IMAGE_ID}`);
-  chalk.setAttribute('color', '#e9f5db');
-  chalk.setAttribute('width', 4.5);
-  chalk.setAttribute('align', 'center');
-  chalk.setAttribute('position', `0 2.2 ${(roomConfig.dimensions?.depth ?? 12) / -2 + 0.1}`);
+  const chalk = createTextPlane('Учитесь с удовольствием!', {
+    color: '#e9f5db',
+    width: 4,
+    position: `0 2.2 ${(roomConfig.dimensions?.depth ?? 12) / -2 + 0.1}`,
+    persistent: true
+  });
   parent.appendChild(chalk);
 }
 
@@ -615,33 +611,20 @@ function resetAnchorContainers() {
 }
 
 function resetDynamicAssets() {
-  const keep = new Set(['placeholder-image', TEXT_FONT_ID, TEXT_FONT_IMAGE_ID]);
+  const keep = new Set(['placeholder-image']);
   Array.from(dom.assetManager.children).forEach(child => {
-    if (!keep.has(child.id)) {
+    if (!keep.has(child.id) && child.dataset.generated !== 'text') {
       child.remove();
     }
   });
   state.assetRegistry.clear();
+  removeGeneratedTextAssets();
 }
 
-function ensureFontAssets() {
+function removeGeneratedTextAssets() {
   if (!dom.assetManager) return;
-
-  if (!dom.assetManager.querySelector(`#${CSS.escape(TEXT_FONT_ID)}`)) {
-    const font = document.createElement('a-asset-item');
-    font.setAttribute('id', TEXT_FONT_ID);
-    font.setAttribute('src', TEXT_FONT_JSON_URL);
-    font.setAttribute('crossorigin', 'anonymous');
-    dom.assetManager.appendChild(font);
-  }
-
-  if (!dom.assetManager.querySelector(`#${CSS.escape(TEXT_FONT_IMAGE_ID)}`)) {
-    const fontImage = document.createElement('img');
-    fontImage.setAttribute('id', TEXT_FONT_IMAGE_ID);
-    fontImage.setAttribute('src', TEXT_FONT_IMAGE_URL);
-    fontImage.setAttribute('crossorigin', 'anonymous');
-    dom.assetManager.appendChild(fontImage);
-  }
+  Array.from(dom.assetManager.querySelectorAll('[data-generated="text"]')).forEach(el => el.remove());
+  state.textTextureCache.clear();
 }
 
 function sanitizeAssetRoot(input) {
@@ -677,6 +660,10 @@ function loadDataset({ text, assetRoot, label = 'Dataset', rememberAssetInput = 
     id: createAnchorId(rec, index),
     assetRoot: sanitizedRoot
   }));
+
+  if (state.rawAnchors.length) {
+    logStatus(`Sample item: ${state.rawAnchors[0].ru} / ${state.rawAnchors[0].en}`);
+  }
 
   applyStoredProgressToAnchors(datasetSignature);
 
@@ -798,6 +785,95 @@ function hashString(input) {
     hash |= 0;
   }
   return Math.abs(hash).toString(36);
+}
+
+function getTextTexture(text = '', options = {}) {
+  const scope = options.scope ?? 'dataset';
+  const key = JSON.stringify({ text, ...options, scope });
+  if (state.textTextureCache.has(key)) {
+    return state.textTextureCache.get(key);
+  }
+
+  const width = options.width ?? TEXT_TEXTURE_WIDTH;
+  const height = options.height ?? TEXT_TEXTURE_HEIGHT;
+  const padding = options.padding ?? TEXT_CANVAS_PADDING;
+  const fontSize = options.fontSize ?? 64;
+  const lineHeight = options.lineHeight ?? Math.floor(fontSize * 1.25);
+  const fontFamily = options.fontFamily ?? TEXT_FONT_FAMILY;
+  const color = options.color ?? '#111111';
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = 'rgba(0,0,0,0)';
+  ctx.fillRect(0, 0, width, height);
+  ctx.fillStyle = color;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+  ctx.font = `${fontSize}px ${fontFamily}`;
+
+  const maxLineWidth = width - padding * 2;
+  const lines = wrapText(ctx, text, maxLineWidth);
+  const totalHeight = lines.length * lineHeight;
+  let y = height / 2 - totalHeight / 2 + lineHeight / 2;
+  lines.forEach(line => {
+    ctx.fillText(line, width / 2, y);
+    y += lineHeight;
+  });
+
+  const id = `text-${hashString(key)}`;
+  canvas.id = id;
+  canvas.dataset.generated = scope === 'dataset' ? 'text' : 'text-global';
+  dom.assetManager.appendChild(canvas);
+
+  const result = {
+    src: `#${id}`,
+    width,
+    height,
+    ratio: height / width
+  };
+  state.textTextureCache.set(key, result);
+  return result;
+}
+
+function wrapText(ctx, text, maxWidth) {
+  if (!text) return [''];
+  const words = text.split(/\s+/);
+  const lines = [];
+  let current = '';
+  words.forEach(word => {
+    const trial = current ? `${current} ${word}` : word;
+    const metrics = ctx.measureText(trial);
+    if (metrics.width > maxWidth && current) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = trial;
+    }
+  });
+  if (current) {
+    lines.push(current);
+  }
+  return lines.length ? lines : [''];
+}
+
+function createTextPlane(text, options = {}) {
+  const texture = getTextTexture(text, {
+    color: options.color ?? '#ffffff',
+    fontSize: options.fontSize,
+    lineHeight: options.lineHeight,
+    scope: options.persistent ? 'global' : 'dataset'
+  });
+  const width = options.width ?? 4;
+  const height = width * texture.ratio;
+  const plane = document.createElement('a-plane');
+  plane.setAttribute('width', width);
+  plane.setAttribute('height', height);
+  plane.setAttribute('material', `shader: flat; transparent: true; src: ${texture.src}`);
+  plane.setAttribute('position', options.position ?? '0 2 0');
+  return plane;
 }
 
 function assignAnchorsToRooms() {
@@ -948,36 +1024,31 @@ function buildAnchorEntity(anchor, roomId, index, roomConfig) {
   }
   wrapper.appendChild(image);
 
-  const ruText = document.createElement('a-text');
-  ruText.setAttribute('value', anchor.ru ?? '');
-  ruText.setAttribute('color', state.config.text?.ruColor ?? '#111');
-  ruText.setAttribute('font', `#${TEXT_FONT_ID}`);
-  ruText.setAttribute('font-image', `#${TEXT_FONT_IMAGE_ID}`);
-  ruText.setAttribute('width', PANEL_WIDTH * 1.05);
-  ruText.setAttribute('align', 'center');
-  ruText.setAttribute('baseline', 'bottom');
-  ruText.setAttribute('wrap-count', state.config.text?.wrapChars ?? 40);
-  ruText.setAttribute('position', `0 ${(PANEL_HEIGHT / 2) - 0.45} ${IMAGE_DEPTH_OFFSET}`);
-  ruText.setAttribute('shader', 'msdf');
-  ruText.setAttribute('side', 'double');
-  wrapper.appendChild(ruText);
-  setTextVisibility(ruText, true);
+  const textPlaneWidth = PANEL_WIDTH * 0.92;
+  const ruTexture = getTextTexture(anchor.ru ?? '', {
+    color: state.config.text?.ruColor ?? '#111111'
+  });
+  const ruHeight = textPlaneWidth * ruTexture.ratio;
+  const ruTextPlane = document.createElement('a-plane');
+  ruTextPlane.setAttribute('width', textPlaneWidth);
+  ruTextPlane.setAttribute('height', Math.max(ruHeight, 0.45));
+  ruTextPlane.setAttribute('material', `shader: flat; transparent: true; src: ${ruTexture.src}`);
+  ruTextPlane.setAttribute('position', `0 ${(PANEL_HEIGHT / 2) - (ruHeight / 2) - 0.15} ${IMAGE_DEPTH_OFFSET + 0.02}`);
+  wrapper.appendChild(ruTextPlane);
 
-  const enText = document.createElement('a-text');
-  enText.setAttribute('value', anchor.en ?? '');
-  enText.setAttribute('color', state.config.text?.enColor ?? '#444');
-  enText.setAttribute('font', `#${TEXT_FONT_ID}`);
-  enText.setAttribute('font-image', `#${TEXT_FONT_IMAGE_ID}`);
-  enText.setAttribute('width', PANEL_WIDTH * 1.05);
-  enText.setAttribute('align', 'center');
-  enText.setAttribute('baseline', 'top');
-  enText.setAttribute('wrap-count', state.config.text?.wrapChars ?? 40);
-  enText.setAttribute('position', `0 ${-(PANEL_HEIGHT / 2) + 0.55} ${IMAGE_DEPTH_OFFSET}`);
-  enText.setAttribute('shader', 'msdf');
-  enText.setAttribute('side', 'double');
-  enText.classList.add('en-label');
-  setTextVisibility(enText, state.revealEnglish);
-  wrapper.appendChild(enText);
+  const enTexture = getTextTexture(anchor.en ?? '', {
+    color: state.config.text?.enColor ?? '#444444'
+  });
+  const enHeight = textPlaneWidth * enTexture.ratio;
+  const enTextPlane = document.createElement('a-plane');
+  enTextPlane.setAttribute('width', textPlaneWidth);
+  enTextPlane.setAttribute('height', Math.max(enHeight, 0.45));
+  enTextPlane.setAttribute('material', `shader: flat; transparent: true; src: ${enTexture.src}`);
+  enTextPlane.setAttribute('position', `0 ${-(PANEL_HEIGHT / 2) + (enHeight / 2) + 0.15} ${IMAGE_DEPTH_OFFSET + 0.02}`);
+  enTextPlane.classList.add('en-label');
+  enTextPlane.setAttribute('visible', state.revealEnglish);
+  enTextPlane.object3D.visible = state.revealEnglish;
+  wrapper.appendChild(enTextPlane);
 
   const hitbox = document.createElement('a-box');
   hitbox.setAttribute('width', PANEL_WIDTH + 0.2);
@@ -1027,9 +1098,9 @@ function buildAnchorEntity(anchor, roomId, index, roomConfig) {
     item: anchor,
     roomId,
     entity: wrapper,
-    ruText,
+    ruText: ruTextPlane,
     panel,
-    enText,
+    enText: enTextPlane,
     audioEntity
   });
 
@@ -1219,26 +1290,14 @@ function applySearchFilter(rawQuery = '') {
   }
 }
 
-function setTextVisibility(textEl, visible) {
-  if (!textEl) return;
-  textEl.setAttribute('visible', visible);
-  if (textEl.object3D) {
-    textEl.object3D.visible = visible;
-  } else {
-    textEl.addEventListener('loaded', () => {
-      if (textEl.object3D) {
-        textEl.object3D.visible = visible;
-      }
-    }, { once: true });
-  }
-}
-
 function updateRevealState() {
   state.anchorEntries.forEach(entry => {
     if (!entry?.entity) return;
     entry.entity.classList.toggle('revealed', state.revealEnglish);
-    setTextVisibility(entry.enText, state.revealEnglish);
-    setTextVisibility(entry.ruText, true);
+    if (entry.enText && entry.enText.object3D) {
+      entry.enText.setAttribute('visible', state.revealEnglish);
+      entry.enText.object3D.visible = state.revealEnglish;
+    }
   });
 }
 
