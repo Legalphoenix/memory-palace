@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>3D Memory Palace</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/aframe-look-at-component@1.0.0/dist/aframe-look-at-component.min.js"></script>
+</head>
+<body>
+  <div id="ui">
+    <h1>Memory Palace</h1>
+    <div class="control-row">
+      <label for="tsv-input">Load TSV File</label>
+      <input type="file" id="tsv-input" accept=".tsv,.txt" />
+      <label for="asset-root">Asset Root (optional override)</label>
+      <input type="text" id="asset-root" placeholder="./assets/" />
+      <button id="load-button" disabled>Parse &amp; Build Palace</button>
+    </div>
+    <div class="control-row">
+      <label for="search-input">Search Anchors</label>
+      <input type="search" id="search-input" placeholder="Type to filter" />
+      <div>
+        <button id="toggle-reveal" class="toggle-button">Reveal English</button>
+        <button id="play-room-audio">Play Room Audio</button>
+      </div>
+    </div>
+    <div class="control-row" id="saved-section">
+      <label for="save-name">Save Current Layout</label>
+      <div class="save-controls">
+        <input type="text" id="save-name" placeholder="Name (e.g. Lesson 1)" />
+        <button id="save-button" disabled>Save Layout</button>
+      </div>
+      <div class="saved-title">Saved Layouts</div>
+      <div id="saved-list"></div>
+    </div>
+    <div class="control-row" id="progress-display">
+      <span data-progress="seen">Seen: 0</span>
+      <span data-progress="heard">Heard: 0</span>
+    </div>
+    <div id="status-log"></div>
+    <div id="mini-map"></div>
+    <div id="room-list"></div>
+    <div id="room-pagination" hidden>
+      <button id="prev-page">Prev</button>
+      <span id="page-label">Page 1 / 1</span>
+      <button id="next-page">Next</button>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <a-scene id="scene" renderer="antialias: true; colorManagement: true" background="color: #e0f2ff" shadow="type: pcfsoft">
+    <a-assets id="asset-manager">
+      <img id="placeholder-image" crossorigin="anonymous" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'><rect width='256' height='256' fill='%23d0ebff'/><path d='M64 192l48-64 32 40 48-80 48 104H64z' fill='%2395c0e2'/><circle cx='96' cy='80' r='28' fill='%2389a7c6'/></svg>" />
+    </a-assets>
+
+    <a-entity light="type: ambient; intensity: 0.3"></a-entity>
+    <a-entity light="type: directional; intensity: 0.6; castShadow: true" position="30 30 10"></a-entity>
+
+    <a-entity id="player-rig" position="0 1.6 3">
+      <a-entity camera look-controls wasd-controls="acceleration: 40" cursor="rayOrigin: mouse"></a-entity>
+      <a-entity laser-controls="hand: left"></a-entity>
+      <a-entity laser-controls="hand: right"></a-entity>
+    </a-entity>
+
+    <a-sky color="#f8fbff"></a-sky>
+  </a-scene>
+
+  <script src="app.js" type="module"></script>
+</body>
+</html>

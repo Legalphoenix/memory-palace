@@ -1,0 +1,153 @@
+{
+  "assetRoot": "./assets/",
+  "roomOrder": [
+    "entrance",
+    "kitchen",
+    "park",
+    "bar",
+    "museum",
+    "living",
+    "clinic",
+    "street",
+    "school"
+  ],
+  "rooms": {
+    "entrance": {
+      "label": "Entrance Hall",
+      "position": {"x": 0, "y": 0, "z": 0},
+      "dimensions": {"width": 14, "height": 5, "depth": 14},
+      "theme": "interior",
+      "spawnOffset": {"x": 0, "y": 0, "z": 4},
+      "grid": {"cols": 4, "rows": 3, "tiers": 2},
+      "colors": {
+        "floor": "#243447",
+        "walls": "#e3f2fd",
+        "ceiling": "#f8fbff"
+      }
+    },
+    "kitchen": {
+      "label": "Kitchen",
+      "position": {"x": 20, "y": 0, "z": 0},
+      "dimensions": {"width": 12, "height": 4, "depth": 12},
+      "theme": "interior",
+      "spawnOffset": {"x": 0, "y": 0, "z": 4},
+      "grid": {"cols": 4, "rows": 3, "tiers": 2},
+      "colors": {
+        "floor": "#ffe0b2",
+        "walls": "#fff8e1",
+        "ceiling": "#fff3e0"
+      }
+    },
+    "park": {
+      "label": "Park",
+      "position": {"x": 40, "y": 0, "z": 0},
+      "dimensions": {"width": 16, "height": 4, "depth": 14},
+      "theme": "exterior",
+      "spawnOffset": {"x": 0, "y": 0, "z": 4},
+      "grid": {"cols": 4, "rows": 3, "tiers": 2},
+      "colors": {
+        "floor": "#8bd18d",
+        "walls": "#c9f0ff",
+        "ceiling": "#e7f9ff"
+      }
+    },
+    "bar": {
+      "label": "Bar",
+      "position": {"x": 60, "y": 0, "z": 0},
+      "dimensions": {"width": 12, "height": 4, "depth": 12},
+      "theme": "interior",
+      "spawnOffset": {"x": 0, "y": 0, "z": 4},
+      "grid": {"cols": 4, "rows": 3, "tiers": 2},
+      "colors": {
+        "floor": "#3b2f2f",
+        "walls": "#f0d6a0",
+        "ceiling": "#fbe0c3"
+      }
+    },
+    "museum": {
+      "label": "Museum",
+      "position": {"x": 80, "y": 0, "z": 0},
+      "dimensions": {"width": 18, "height": 6, "depth": 14},
+      "theme": "interior",
+      "spawnOffset": {"x": 0, "y": 0, "z": 4},
+      "grid": {"cols": 4, "rows": 3, "tiers": 2},
+      "colors": {
+        "floor": "#d9c4a6",
+        "walls": "#f7f0e6",
+        "ceiling": "#fff8ed"
+      }
+    },
+    "living": {
+      "label": "Living Room",
+      "position": {"x": 100, "y": 0, "z": 0},
+      "dimensions": {"width": 14, "height": 4, "depth": 12},
+      "theme": "interior",
+      "spawnOffset": {"x": 0, "y": 0, "z": 4},
+      "grid": {"cols": 4, "rows": 3, "tiers": 2},
+      "colors": {
+        "floor": "#d8e2ff",
+        "walls": "#f4ecff",
+        "ceiling": "#fdf7ff"
+      }
+    },
+    "clinic": {
+      "label": "Clinic",
+      "position": {"x": 120, "y": 0, "z": 0},
+      "dimensions": {"width": 12, "height": 4, "depth": 12},
+      "theme": "interior",
+      "spawnOffset": {"x": 0, "y": 0, "z": 4},
+      "grid": {"cols": 4, "rows": 3, "tiers": 2},
+      "colors": {
+        "floor": "#c8f7f7",
+        "walls": "#f1ffff",
+        "ceiling": "#f9ffff"
+      }
+    },
+    "street": {
+      "label": "Street / Garage",
+      "position": {"x": 140, "y": 0, "z": 0},
+      "dimensions": {"width": 18, "height": 4, "depth": 14},
+      "theme": "exterior",
+      "spawnOffset": {"x": 0, "y": 0, "z": 4},
+      "grid": {"cols": 4, "rows": 3, "tiers": 2},
+      "colors": {
+        "floor": "#4a627a",
+        "walls": "#cfd8dc",
+        "ceiling": "#e9f2f5"
+      }
+    },
+    "school": {
+      "label": "School Classroom",
+      "position": {"x": 160, "y": 0, "z": 0},
+      "dimensions": {"width": 14, "height": 4, "depth": 12},
+      "theme": "interior",
+      "spawnOffset": {"x": 0, "y": 0, "z": 4},
+      "grid": {"cols": 4, "rows": 3, "tiers": 2},
+      "colors": {
+        "floor": "#ffe59a",
+        "walls": "#fff5d7",
+        "ceiling": "#fffaf0"
+      }
+    }
+  },
+  "roomCap": {"default": 12},
+  "placement": {
+    "gridCols": 4,
+    "gridRows": 3,
+    "cellWidth": 2.4,
+    "cellHeight": 1.5,
+    "baseHeight": 1.6
+  },
+  "text": {
+    "ruColor": "#111111",
+    "enColor": "#4a4a4a",
+    "wrapChars": 38
+  },
+  "audio": {
+    "volume": 1.0
+  },
+  "controls": {
+    "teleport": true,
+    "gaze": false
+  }
+}
